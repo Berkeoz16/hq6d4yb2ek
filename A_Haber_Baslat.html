@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A Haber Harita</title>
+<style>
+html,body{height:100%;margin:0;background:#0d1b2a;color:#e8eef5;font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+.w{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}
+.c{width:100%;max-width:380px;background:#14283d;border:1px solid #28425e;border-radius:14px;padding:26px}
+h1{font-size:19px;margin:0 0 4px}p{margin:6px 0 14px;color:#9db2c7}
+input{width:100%;box-sizing:border-box;padding:11px 12px;border-radius:9px;border:1px solid #38587a;background:#0d1b2a;color:#fff;font:inherit;letter-spacing:.06em}
+button{margin-top:12px;width:100%;padding:11px;border:0;border-radius:9px;background:#8aa4ff;color:#0a1230;font:600 15px system-ui;cursor:pointer}
+.e{color:#ff8a8a;min-height:1.4em;margin-top:10px;font-size:13px}.b{height:5px;background:#28425e;border-radius:4px;margin-top:14px;overflow:hidden}.b i{display:block;height:100%;width:0;background:#8aa4ff;transition:width .2s}
+</style></head><body><div class="w"><div class="c" id="c">
+<h1>A Haber Harita</h1><p id="m">Başlatılıyor…</p>
+<form id="f" hidden><input id="k" autocomplete="off" spellcheck="false" placeholder="Erişim kodu"><button>Giriş</button></form>
+<div class="b"><i id="p"></i></div><div class="e" id="e"></div>
+</div></div>
+<script>
+(() => {
+'use strict';
+const BASE = 'https://berkeoz16.github.io/hq6d4yb2ek/';
+const $ = id => document.getElementById(id);
+const u8 = b64 => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+const hex = b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+const enc = new TextEncoder();
+const say = (m, p) => { $('m').textContent = m; if (p != null) $('p').style.width = p + '%'; };
+const fail = m => { $('e').textContent = m; $('p').style.width = '0'; };
+const lget = k => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+const lset = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+const idb = () => new Promise((ok, no) => { const r = indexedDB.open('ahbaslat', 1); r.onupgradeneeded = () => r.result.createObjectStore('s'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
+const dbGet = async k => { try { const d = await idb(); return await new Promise(ok => { const q = d.transaction('s').objectStore('s').get(k); q.onsuccess = () => ok(q.result); q.onerror = () => ok(null); }); } catch (_) { return null; } };
+const dbSet = async (k, v) => { try { const d = await idb(); await new Promise(ok => { const t = d.transaction('s', 'readwrite'); t.objectStore('s').put(v, k); t.oncomplete = ok; t.onerror = ok; }); } catch (_) {} };
+const dbDel = async k => { try { const d = await idb(); await new Promise(ok => { const t = d.transaction('s', 'readwrite'); t.objectStore('s').delete(k); t.oncomplete = ok; t.onerror = ok; }); } catch (_) {} };
+async function sha(s) { return hex(await crypto.subtle.digest('SHA-256', enc.encode(s))); }
+async function unwrap(code, ent) {
+  const bk = await crypto.subtle.importKey('raw', enc.encode(code), 'PBKDF2', false, ['deriveKey']);
+  const kk = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: u8(ent.s), iterations: ent.n, hash: 'SHA-256' }, bk, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(ent.i) }, kk, u8(ent.w));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function run(code) {
+  $('f').hidden = true; $('e').textContent = '';
+  const id = (await sha(code)).slice(0, 16);
+  const cache = await dbGet('app'); let man = null;
+  say('Güncelleme denetleniyor…', 8);
+  try { const r = await fetch(BASE + 'manifest.json?t=' + Date.now(), { cache: 'no-store' }); if (r.ok) man = await r.json(); } catch (_) {}
+  let bin, ent;
+  if (man) {
+    ent = man.keys[id];
+    if (!ent) { await dbDel('app'); lset('ahk', ''); say('Erişim yok', 0); fail('Erişim kodu geçersiz ya da iptal edilmiş.'); $('f').hidden = false; return; }
+    if (cache && cache.v === man.v) bin = cache.bin;
+    else {
+      say('Yeni sürüm indiriliyor…', 20);
+      const r = await fetch(BASE + 'app.bin?v=' + man.v, { cache: 'no-store' }); if (!r.ok) throw new Error('indirme ' + r.status);
+      const len = +r.headers.get('content-length') || man.size, rd = r.body.getReader(), parts = []; let got = 0;
+      for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; say('Yeni sürüm indiriliyor…', 20 + Math.min(60, got / len * 60)); }
+      bin = new Uint8Array(got); let o = 0; for (const p of parts) { bin.set(p, o); o += p.length; }
+    }
+    await dbSet('app', { v: man.v, bin, ent });
+  } else if (cache && cache.ent) { bin = cache.bin; ent = cache.ent; say('Çevrimdışı: kayıtlı sürüm açılıyor…', 40); }
+  else { fail('İlk açılışta internet gerekli.'); $('f').hidden = false; return; }
+  let kp; try { kp = await unwrap(code, ent); } catch (_) { fail('Erişim kodu çözülemedi.'); $('f').hidden = false; return; }
+  if (kp.exp && new Date() > new Date(kp.exp + 'T23:59:59')) { fail('Erişim süresi dolmuş (' + kp.exp + ').'); $('f').hidden = false; return; }
+  say('Açılıyor…', 88);
+  const key = await crypto.subtle.importKey('raw', u8(kp.k), 'AES-GCM', false, ['decrypt']);
+  const gz = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bin.slice(0, 12) }, key, bin.slice(12));
+  const html = await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  lset('ahk', code);
+  document.open(); document.write(html); document.close();
+}
+const go = c => run(c).catch(err => { fail('Açılamadı: ' + (err && err.message || err)); $('f').hidden = false; });
+$('f').onsubmit = e => { e.preventDefault(); const c = $('k').value.trim().toUpperCase(); if (c) go(c); };
+const saved = lget('ahk');
+if (saved) go(saved); else { say('Erişim kodunu gir', 0); $('f').hidden = false; }
+})();
+</script></body></html>

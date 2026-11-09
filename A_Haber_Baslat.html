@@ -46,7 +46,7 @@ async function run(code) {
   let bin, ent;
   if (man) {
     ent = man.keys[id];
-    if (!ent) { await dbDel('app'); lset('ahk', ''); say('Erişim yok', 0); fail('Erişim kodu geçersiz ya da iptal edilmiş.'); $('f').hidden = false; return; }
+    if (!ent) { await dbDel('app'); lset('ahk', ''); await dbDel('code'); say('Erişim yok', 0); fail('Erişim kodu geçersiz ya da iptal edilmiş.'); $('f').hidden = false; return; }
     if (cache && cache.v === man.v) bin = cache.bin;
     else {
       say('Yeni sürüm indiriliyor…', 20);
@@ -64,12 +64,11 @@ async function run(code) {
   const key = await crypto.subtle.importKey('raw', u8(kp.k), 'AES-GCM', false, ['decrypt']);
   const gz = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bin.slice(0, 12) }, key, bin.slice(12));
   const html = await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
-  lset('ahk', code);
+  lset('ahk', code); await dbSet('code', code); try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (_) {}
   document.open(); document.write(html); document.close();
 }
 const go = c => run(c).catch(err => { fail('Açılamadı: ' + (err && err.message || err)); $('f').hidden = false; });
 $('f').onsubmit = e => { e.preventDefault(); const c = $('k').value.trim().toUpperCase(); if (c) go(c); };
-const saved = lget('ahk');
-if (saved) go(saved); else { say('Erişim kodunu gir', 0); $('f').hidden = false; }
+(async () => { const saved = lget('ahk') || await dbGet('code'); if (saved) go(saved); else { say('Erişim kodunu gir', 0); $('f').hidden = false; } })();
 })();
 </script></body></html>

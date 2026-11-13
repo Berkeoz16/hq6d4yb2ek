@@ -60,6 +60,7 @@ async function run(code) {
   else { fail('İlk açılışta internet gerekli.'); $('f').hidden = false; return; }
   let kp; try { kp = await unwrap(code, ent); } catch (_) { fail('Erişim kodu çözülemedi.'); $('f').hidden = false; return; }
   if (kp.exp && new Date() > new Date(kp.exp + 'T23:59:59')) { fail('Erişim süresi dolmuş (' + kp.exp + ').'); $('f').hidden = false; return; }
+  window.__AH_USER = kp.ad || ''; window.__AH_ID = id;
   say('Açılıyor…', 88);
   const key = await crypto.subtle.importKey('raw', u8(kp.k), 'AES-GCM', false, ['decrypt']);
   const gz = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bin.slice(0, 12) }, key, bin.slice(12));
